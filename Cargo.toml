@@ -27,7 +27,7 @@ futures-util = "0.3"
 getrandom = "0.2"
 hex = "0.4"
 if-addrs = "0.12"
-jni = "0.21"
+jni = "0.22"
 rfd = "0.14"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging"] }
 rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }

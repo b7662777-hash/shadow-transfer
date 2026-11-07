@@ -7,6 +7,7 @@ import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +37,9 @@ class ShadowRepository(private val context: Context) {
     private var destinationUri: Uri? = null
     private var multicastLock: WifiManager.MulticastLock? = null
     private var transferWifiLock: WifiManager.WifiLock? = null
+    private var autoDiscoveryJob: Job? = null
+    @Volatile
+    private var foreground = false
     private var messageCounter = 0L
 
     private val defaultName = (Build.MODEL ?: "Android Tablet").trim().take(64)
@@ -68,6 +72,7 @@ class ShadowRepository(private val context: Context) {
                 },
             ),
         )
+        refreshTrustedDevices()
         pollLoop()
     }
 
@@ -383,9 +388,16 @@ class ShadowRepository(private val context: Context) {
     }
 
     fun respondApproval(id: String, accept: Boolean) {
+        val pairing = _state.value.approvals.firstOrNull { it.id == id }?.kind == "pairing"
         runCatching { ShadowEngine.nativeRespond(id, accept) }
             .onFailure { toast("Cannot answer request: ${it.message}", true) }
         _state.update { it.copy(approvals = it.approvals.filterNot { approval -> approval.id == id }) }
+        if (pairing && accept) {
+            scope.launch {
+                delay(800)
+                refreshTrustedDevices()
+            }
+        }
     }
 
     fun cancelTransfer(id: String) {
@@ -394,6 +406,32 @@ class ShadowRepository(private val context: Context) {
     }
 
     fun scanDevices() {
+        if (_state.value.scanning) return
+        scope.launch { runDiscoveryPass() }
+    }
+
+    fun onForeground() {
+        foreground = true
+        if (autoDiscoveryJob?.isActive == true) return
+        autoDiscoveryJob = scope.launch {
+            while (isActive && foreground) {
+                if (!_state.value.scanning) {
+                    runDiscoveryPass()
+                }
+                delay(10_000)
+            }
+        }
+    }
+
+    fun onBackground() {
+        foreground = false
+        autoDiscoveryJob?.cancel()
+        autoDiscoveryJob = null
+        releaseMulticast()
+        _state.update { it.copy(scanning = false) }
+    }
+
+    private suspend fun runDiscoveryPass() {
         if (_state.value.scanning) return
         acquireMulticast()
         _state.update { it.copy(scanning = true) }
@@ -404,10 +442,38 @@ class ShadowRepository(private val context: Context) {
             toast("Cannot start discovery", true)
             return
         }
-        scope.launch {
-            delay(6000)
-            releaseMulticast()
-            _state.update { it.copy(scanning = false) }
+        delay(4_500)
+        releaseMulticast()
+        _state.update { it.copy(scanning = false) }
+    }
+
+    fun refreshTrustedDevices() {
+        val devices = runCatching {
+            val raw = ShadowEngine.nativeListTrusted() ?: "[]"
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { index ->
+                val item = array.optJSONObject(index) ?: return@mapNotNull null
+                TrustedDeviceUi(
+                    name = item.optString("name"),
+                    fingerprint = item.optString("fingerprint"),
+                    lastSeen = item.optLong("lastSeen"),
+                )
+            }
+        }.getOrElse {
+            Log.w(TAG, "cannot read trusted devices", it)
+            emptyList()
+        }
+        _state.update { it.copy(trustedDevices = devices) }
+    }
+
+    fun revokeTrusted(fingerprint: String) {
+        val revoked = runCatching { ShadowEngine.nativeRevokeTrusted(fingerprint) }
+            .getOrDefault(false)
+        if (revoked) {
+            toast("Device trust revoked. It must pair again.", false)
+            refreshTrustedDevices()
+        } else {
+            toast("Cannot revoke this device", true)
         }
     }
 

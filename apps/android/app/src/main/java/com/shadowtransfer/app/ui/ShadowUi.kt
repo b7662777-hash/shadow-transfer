@@ -651,6 +651,7 @@ private fun ApprovalDialog(approval: ApprovalUi, repository: ShadowRepository) {
 @Composable
 private fun SettingsDialog(state: UiState, repository: ShadowRepository, onClose: () -> Unit) {
     var name by remember { mutableStateOf(state.deviceName) }
+    LaunchedEffect(Unit) { repository.refreshTrustedDevices() }
     AlertDialog(
         onDismissRequest = onClose,
         containerColor = Surface,
@@ -682,6 +683,26 @@ private fun SettingsDialog(state: UiState, repository: ShadowRepository, onClose
                     "Changing the device name takes effect after restarting receive mode.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+                HorizontalDivider(color = Outline)
+                Text("TRUSTED DEVICES", style = MaterialTheme.typography.labelSmall, color = Muted)
+                if (state.trustedDevices.isEmpty()) {
+                    Text("No paired devices yet.", style = MaterialTheme.typography.bodySmall)
+                }
+                state.trustedDevices.forEach { device ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(device.name, color = TextPrimary, style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                shortFingerprint(device.fingerprint),
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                color = Muted,
+                            )
+                        }
+                        TextButton(onClick = { repository.revokeTrusted(device.fingerprint) }) {
+                            Text("Remove", color = Danger)
+                        }
+                    }
+                }
             }
         },
         confirmButton = {

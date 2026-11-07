@@ -10,6 +10,7 @@ name = "shadow_android"
 crate-type = ["cdylib"]
 
 [dependencies]
+hex.workspace = true
 jni.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -1,6 +1,6 @@
 # Shadow Transfer v0.2 Product Redesign Plan
 
-Status: planning complete, implementation not started.
+Status: M1 partially implemented on `redesign/v0.2` (Windows continuous discovery/last-seen/trusted selection; Android foreground auto-discovery and trusted-device list/revoke). QR and platform metadata remain in M1.
 Baseline: v0.1.0 (`main`, release published). The working transfer engine and protocol are preserved.
 
 ## 1. What exists today

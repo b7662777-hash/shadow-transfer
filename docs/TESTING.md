@@ -8,7 +8,7 @@ Command:
 cargo test --workspace
 ```
 
-Result of the recorded run: **47 tests, 0 failures** (plus two empty test harnesses for binaries).
+Result of the recorded run: **48 tests, 0 failures** (plus two empty test harnesses for binaries).
 
 | Suite | Count | Covers |
 |---|---|---|

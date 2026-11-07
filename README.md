@@ -32,7 +32,7 @@ The same Rust protocol, crypto, streaming and resume engine runs on both platfor
 
 | Component | State |
 |---|---|
-| Shared Rust core | Built · 47 automated tests · `fmt` and `clippy -D warnings` clean |
+| Shared Rust core | Built · 48 automated tests · `fmt` and `clippy -D warnings` clean |
 | Windows app | Release EXE, portable ZIP and installer · GUI transfers verified |
 | Android app | Debug and release APKs (arm64, armv7, x86_64) · installed and used on a Samsung Galaxy Tab A7 (SM-T505) |
 | Real-device transfer | Windows → SM-T505: 449 MB and 1.845 GB files completed and BLAKE3-verified |
@@ -184,7 +184,7 @@ Windows packaging scripts live in [`scripts/`](scripts); Android details and sig
 cargo test --workspace
 ```
 
-The suite contains **47 tests**, including real TCP/TLS/filesystem end-to-end tests:
+The suite contains **48 tests**, including real TCP/TLS/filesystem end-to-end tests:
 
 - paired transfer with folders, Unicode names and empty files;
 - wrong code, missing code, declined approvals;

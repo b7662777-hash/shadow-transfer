@@ -58,6 +58,7 @@ struct PeerView {
     addr: SocketAddr,
     fingerprint: Option<String>,
     manual: bool,
+    last_seen: Option<Instant>,
 }
 
 #[derive(Clone)]
@@ -172,6 +173,7 @@ pub struct ShadowApp {
     pair_error: Option<(SocketAddr, String)>,
     discovery_running: bool,
     discovery_cancel: Option<CancellationToken>,
+    next_discovery_at: Instant,
     sources: Vec<SourceFile>,
     sources_loading: bool,
     total_bytes: u64,
@@ -249,6 +251,7 @@ impl ShadowApp {
             pair_error: None,
             discovery_running: false,
             discovery_cancel: None,
+            next_discovery_at: Instant::now(),
             sources: Vec::new(),
             sources_loading: false,
             total_bytes: 0,
@@ -313,6 +316,7 @@ impl ShadowApp {
             return;
         }
         self.discovery_running = true;
+        self.next_discovery_at = Instant::now() + Duration::from_secs(8);
         let cancel = CancellationToken::new();
         if let Some(previous) = self.discovery_cancel.replace(cancel.clone()) {
             previous.cancel();
@@ -598,16 +602,10 @@ impl ShadowApp {
             AppEvent::PairDone { addr, result } => self.handle_pair_done(addr, result),
             AppEvent::Discovered(result) => {
                 self.discovery_running = false;
+                self.next_discovery_at = Instant::now() + Duration::from_secs(6);
                 match result {
                     Ok(devices) => {
-                        let count = devices.len();
                         self.merge_discovered(devices);
-                        if count == 0 {
-                            self.set_toast(
-                                "No devices found. Enable receive mode on the other device or connect by IP.",
-                                false,
-                            );
-                        }
                     }
                     Err(err) => self.set_toast(format!("Discovery failed: {err}"), true),
                 }
@@ -623,23 +621,66 @@ impl ShadowApp {
     }
 
     fn merge_discovered(&mut self, devices: Vec<DiscoveredDevice>) {
-        let manual: Vec<PeerView> = self.peers.iter().filter(|p| p.manual).cloned().collect();
-        self.peers = devices
-            .into_iter()
+        let now = Instant::now();
+        let manual: Vec<PeerView> = self
+            .peers
+            .iter()
+            .filter(|peer| peer.manual)
+            .cloned()
+            .collect();
+
+        let mut auto: Vec<PeerView> = devices
+            .iter()
             .map(|device| PeerView {
-                name: device.name,
+                name: device.name.clone(),
                 addr: device.addr,
-                fingerprint: Some(device.fingerprint),
+                fingerprint: Some(device.fingerprint.clone()),
                 manual: false,
+                last_seen: Some(now),
             })
             .collect();
+
+        // Keep recently seen devices as offline entries instead of making them
+        // vanish after one missed beacon.
+        for old in self.peers.iter().filter(|peer| !peer.manual) {
+            if devices.iter().any(|device| device.addr == old.addr) {
+                continue;
+            }
+            if old
+                .last_seen
+                .map(|seen| now.duration_since(seen) < Duration::from_secs(300))
+                .unwrap_or(false)
+            {
+                auto.push(old.clone());
+            }
+        }
+
+        auto.sort_by(|a, b| {
+            let a_online = peer_is_online(a);
+            let b_online = peer_is_online(b);
+            let a_trusted = peer_trusted(&self.trust, a);
+            let b_trusted = peer_trusted(&self.trust, b);
+            b_online
+                .cmp(&a_online)
+                .then_with(|| b_trusted.cmp(&a_trusted))
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
+        self.peers = auto;
         self.peers.extend(manual);
+
         let selection_valid = self
             .selected_addr
-            .map(|addr| self.peers.iter().any(|p| p.addr == addr))
+            .and_then(|addr| self.peers.iter().find(|peer| peer.addr == addr))
+            .map(|peer| peer_is_online(peer) || peer.manual)
             .unwrap_or(false);
         if !selection_valid {
-            self.selected_addr = self.peers.first().map(|p| p.addr);
+            self.selected_addr = self
+                .peers
+                .iter()
+                .find(|peer| peer_is_online(peer) && peer_trusted(&self.trust, peer))
+                .or_else(|| self.peers.iter().find(|peer| peer_is_online(peer)))
+                .or_else(|| self.peers.first())
+                .map(|peer| peer.addr);
         }
     }
 
@@ -1055,6 +1096,7 @@ impl ShadowApp {
                 addr,
                 fingerprint: None,
                 manual: true,
+                last_seen: None,
             });
         }
         self.selected_addr = Some(addr);
@@ -1343,7 +1385,24 @@ impl ShadowApp {
                                 ),
                                 None => peer.addr.to_string(),
                             };
-                            ui.label(RichText::new(detail).small().color(MUTED));
+                            let presence = if peer.manual {
+                                "manual".to_string()
+                            } else if peer_is_online(peer) {
+                                "online".to_string()
+                            } else if let Some(seen) = peer.last_seen {
+                                format!("offline · seen {}s ago", seen.elapsed().as_secs())
+                            } else {
+                                "offline".to_string()
+                            };
+                            ui.label(
+                                RichText::new(format!("{detail} · {presence}"))
+                                    .small()
+                                    .color(if peer_is_online(peer) || peer.manual {
+                                        MUTED
+                                    } else {
+                                        YELLOW
+                                    }),
+                            );
                         });
                     ui.add_space(6.0);
                 }
@@ -2347,6 +2406,14 @@ impl ShadowApp {
     }
 }
 
+fn peer_is_online(peer: &PeerView) -> bool {
+    peer.manual
+        || peer
+            .last_seen
+            .map(|seen| seen.elapsed() <= Duration::from_secs(12))
+            .unwrap_or(false)
+}
+
 fn peer_trusted(trust: &TrustStore, peer: &PeerView) -> bool {
     peer.fingerprint
         .as_deref()
@@ -2436,6 +2503,13 @@ impl eframe::App for ShadowApp {
         while let Ok(event) = self.events_rx.try_recv() {
             self.handle_app_event(ctx, event);
         }
+        if !self.discovery_running && Instant::now() >= self.next_discovery_at {
+            let focused = ctx.input(|input| input.viewport().focused.unwrap_or(true));
+            let minimized = ctx.input(|input| input.viewport().minimized.unwrap_or(false));
+            if focused && !minimized {
+                self.start_discovery();
+            }
+        }
         self.handle_drops(ctx);
         if !self.demo_autosend_started {
             if let Some((addr, code)) = self.demo_autosend.clone() {
@@ -2446,6 +2520,7 @@ impl eframe::App for ShadowApp {
                         addr,
                         fingerprint: None,
                         manual: true,
+                        last_seen: None,
                     };
                     self.selected_addr = Some(addr);
                     self.peers.push(peer.clone());
@@ -2462,6 +2537,10 @@ impl eframe::App for ShadowApp {
         self.paint_drop_overlay(ctx);
         if self.ongoing() {
             ctx.request_repaint_after(Duration::from_millis(100));
+        } else {
+            // Idle repaint drives the automatic discovery cadence without a
+            // busy loop; the focused-window check still gates network use.
+            ctx.request_repaint_after(Duration::from_secs(2));
         }
     }
 }
@@ -2511,5 +2590,34 @@ impl eframe::App for RootApp {
                 });
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn peer(last_seen: Option<Instant>, manual: bool) -> PeerView {
+        PeerView {
+            name: "Test".into(),
+            addr: "127.0.0.1:47831".parse().unwrap(),
+            fingerprint: None,
+            manual,
+            last_seen,
+        }
+    }
+
+    #[test]
+    fn presence_uses_a_twelve_second_window() {
+        assert!(peer_is_online(&peer(Some(Instant::now()), false)));
+        assert!(peer_is_online(&peer(
+            Some(Instant::now() - Duration::from_secs(5)),
+            false
+        )));
+        assert!(!peer_is_online(&peer(
+            Some(Instant::now() - Duration::from_secs(20)),
+            false
+        )));
+        assert!(peer_is_online(&peer(None, true)));
     }
 }

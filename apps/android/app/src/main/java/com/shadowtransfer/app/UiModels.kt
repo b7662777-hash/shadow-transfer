@@ -37,6 +37,12 @@ data class ApprovalUi(
     val preview: List<String> = emptyList(),
 )
 
+data class TrustedDeviceUi(
+    val name: String,
+    val fingerprint: String,
+    val lastSeen: Long = 0,
+)
+
 data class DeviceUi(
     val name: String,
     val addr: String,
@@ -65,6 +71,7 @@ data class UiState(
     val devices: List<DeviceUi> = emptyList(),
     val scanning: Boolean = false,
     val recent: List<HistoryUi> = emptyList(),
+    val trustedDevices: List<TrustedDeviceUi> = emptyList(),
     val destinationLabel: String = "Choose receive folder",
     val stagingLabel: String? = null,
     val receiverError: String? = null,

@@ -340,6 +340,46 @@ pub extern "system" fn Java_com_shadowtransfer_app_ShadowEngine_nativeRespond(
 }
 
 #[no_mangle]
+pub extern "system" fn Java_com_shadowtransfer_app_ShadowEngine_nativeListTrusted(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    guarded_string(&mut env, |_env| {
+        let engine = engine().ok_or("engine not initialized")?;
+        let devices = engine.trust.list().map_err(|e| e.to_string())?;
+        let array: Vec<Value> = devices
+            .into_iter()
+            .map(|device| {
+                json!({
+                    "name": device.name,
+                    "fingerprint": device.fingerprint,
+                    "addedAt": device.added_at,
+                    "lastSeen": device.last_seen,
+                })
+            })
+            .collect();
+        Ok(json!(array).to_string())
+    })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_shadowtransfer_app_ShadowEngine_nativeRevokeTrusted(
+    mut env: JNIEnv,
+    _class: JClass,
+    fingerprint: JString,
+) -> jboolean {
+    guarded_bool(&mut env, |env| {
+        let value = read_string(env, &fingerprint)?;
+        let bytes = hex::decode(value).map_err(|_| "invalid fingerprint encoding".to_string())?;
+        let fingerprint: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| "fingerprint must be 32 bytes".to_string())?;
+        let engine = engine().ok_or("engine not initialized")?;
+        engine.trust.revoke(&fingerprint).map_err(|e| e.to_string())
+    })
+}
+
+#[no_mangle]
 pub extern "system" fn Java_com_shadowtransfer_app_ShadowEngine_nativeCancelTransfer(
     mut env: JNIEnv,
     _class: JClass,

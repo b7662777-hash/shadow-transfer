@@ -13,6 +13,8 @@ object ShadowEngine {
     external fun nativePairingCode(): String?
     external fun nativeNewPairingCode(): String?
     external fun nativeRespond(approvalId: String, accept: Boolean): Boolean
+    external fun nativeListTrusted(): String?
+    external fun nativeRevokeTrusted(fingerprint: String): Boolean
     external fun nativeCancelTransfer(transferId: String): Boolean
     external fun nativeSendFiles(
         host: String,

@@ -3270,6 +3270,7 @@ dependencies = [
 name = "shadow-android"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "jni 0.21.1",
  "serde",
  "serde_json",

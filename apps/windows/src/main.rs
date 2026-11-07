@@ -2,6 +2,7 @@
 
 mod app;
 mod storage;
+mod theme;
 
 fn main() -> eframe::Result<()> {
     init_logging();

@@ -8,7 +8,7 @@ Command:
 cargo test --workspace
 ```
 
-Result of the recorded run: **47 tests, 0 failures** (plus two empty test harnesses for binaries).
+Result of the recorded run: **48 tests, 0 failures** (plus two empty test harnesses for binaries).
 
 | Suite | Count | Covers |
 |---|---|---|
@@ -37,6 +37,7 @@ Security-negative tests (traversal, corrupt chunks, untrusted clients, bad frame
 
 - **Windows receive:** a real 12 MiB file named `GUI-Test-文件.bin` was sent from the headless `send_demo` engine to the running Windows GUI. The UI displayed `Verified`, `12.0 MiB / 12.0 MiB`, speed and `BLAKE3 verified · 0.2s`. The file appeared in `C:\Users\<user>\Downloads\ShadowTransfer` with an identical SHA-256. Pairing and transfer approval dialogs were visually verified (name + fingerprint). The pairing code rotated after pairing.
 - **Windows send:** the GUI (debug autosend hook, same code path as the Send button) sent a 12 MiB file to a headless auto-approving receiver. UI showed `Verified`, average 66.4 MB/s, `BLAKE3 verified on receiver`. Received SHA-256 matched exactly.
+- **M2 premium UI:** Windows Home/Send/Receive/Activity/Trusted/Settings/Advanced screens compiled and were visually inspected at 1160×800; Android debug APK builds with bottom navigation, Home actions, Activity and Settings. The retheming has not been exercised on the physical tablet.
 - **Receive mode crash fix discovered by UI testing:** `tokio::spawn` was called from the egui thread; this crashed receive mode. Fixed to use the application runtime and re-verified with a real receive.
 - **Discovery/UX regression found with the real tablet on the LAN:** UDP beacons from the SM-T505 were confirmed arriving on Windows, but the code input was hidden inside a later modal and the port field accepted arbitrary text; the user pasted the code there. Fixed with a standalone Pair action, separate Auto Discovery / Manual Connection cards each with its own code field and button, numeric-only port, explicit "code needed" badge and "tap Approve on the tablet" guidance. The fixed build auto-discovered SM-T505 in the launch scan.
 

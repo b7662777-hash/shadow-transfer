@@ -12,15 +12,27 @@ import com.shadowtransfer.app.ui.ShadowScreen
 import com.shadowtransfer.app.ui.ShadowTheme
 
 class MainActivity : ComponentActivity() {
+    private val repository: ShadowRepository
+        get() = (application as ShadowApplication).repository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val repository = (application as ShadowApplication).repository
         requestRuntimePermissions()
         setContent {
             ShadowTheme {
                 ShadowScreen(repository)
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        repository.onForeground()
+    }
+
+    override fun onStop() {
+        repository.onBackground()
+        super.onStop()
     }
 
     private fun requestRuntimePermissions() {

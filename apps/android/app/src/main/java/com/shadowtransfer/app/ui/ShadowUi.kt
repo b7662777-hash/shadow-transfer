@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -28,6 +30,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -68,22 +73,23 @@ import com.shadowtransfer.app.UiState
 import kotlinx.coroutines.delay
 import java.io.File
 
-val Background = Color(0xFF07080A)
-val Surface = Color(0xFF12141A)
-val Elevated = Color(0xFF191C23)
-val Outline = Color(0xFF2A2E37)
-val TextPrimary = Color(0xFFE7E9EF)
-val Muted = Color(0xFF8E94A0)
-val Accent = Color(0xFF8F7EFF)
-val AccentDark = Color(0xFF3E337A)
-val Success = Color(0xFF4ADE80)
+val Background = Color(0xFF070B14)
+val Surface = Color(0xFF0B1220)
+val Elevated = Color(0xFF101A2C)
+val Outline = Color(0xFF1E2C44)
+val TextPrimary = Color(0xFFE8EEF9)
+val Muted = Color(0xFF8FA0B8)
+val Accent = Color(0xFF3B82F6)
+val AccentDark = Color(0xFF1E3A8A)
+val Cyan = Color(0xFF22D3EE)
+val Success = Color(0xFF34D399)
 val Danger = Color(0xFFF87171)
-val Warning = Color(0xFFFACC15)
+val Warning = Color(0xFFFBBF24)
 
 private val Scheme = darkColorScheme(
     primary = Accent,
     onPrimary = Color.White,
-    secondary = Success,
+    secondary = Cyan,
     background = Background,
     onBackground = TextPrimary,
     surface = Surface,
@@ -111,6 +117,12 @@ fun ShadowTheme(content: @Composable () -> Unit) {
     )
 }
 
+private enum class AppTab(val label: String) {
+    Home("Home"),
+    Activity("Activity"),
+    Settings("Settings"),
+}
+
 @Composable
 fun ShadowScreen(repository: ShadowRepository) {
     val state by repository.state.collectAsState()
@@ -132,7 +144,7 @@ fun ShadowScreen(repository: ShadowRepository) {
         ActivityResultContracts.OpenDocumentTree(),
     ) { uri -> uri?.let(repository::setDestination) }
 
-    var showSettings by remember { mutableStateOf(false) }
+    var tab by remember { mutableStateOf(AppTab.Home) }
     var host by rememberSaveable { mutableStateOf("") }
     var port by rememberSaveable { mutableStateOf(ShadowRepository.DEFAULT_PORT.toString()) }
     var code by rememberSaveable { mutableStateOf("") }
@@ -140,66 +152,48 @@ fun ShadowScreen(repository: ShadowRepository) {
     Scaffold(
         containerColor = Background,
         snackbarHost = { SnackbarHost(snackbar) },
+        bottomBar = {
+            NavigationBar(containerColor = Surface, tonalElevation = 0.dp) {
+                AppTab.entries.forEach { item ->
+                    NavigationBarItem(
+                        selected = tab == item,
+                        onClick = { tab = item },
+                        icon = {
+                            Icon(
+                                when (item) {
+                                    AppTab.Home -> Icons.Outlined.Home
+                                    AppTab.Activity -> Icons.Outlined.History
+                                    AppTab.Settings -> Icons.Outlined.Settings
+                                },
+                                contentDescription = item.label,
+                            )
+                        },
+                        label = { Text(item.label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Accent,
+                            selectedTextColor = Accent,
+                            indicatorColor = AccentDark,
+                            unselectedIconColor = Muted,
+                            unselectedTextColor = Muted,
+                        ),
+                    )
+                }
+            }
+        },
     ) { padding ->
-        BoxWithConstraints(
+        Column(
             Modifier
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            val wide = maxWidth > 900.dp
-            if (wide) {
-                Row(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Header(onSettings = { showSettings = true })
-                        ReceiveCard(state, repository, onChooseFolder = { destinationPicker.launch(null) })
-                        SendCard(
-                            state = state,
-                            repository = repository,
-                            host = host,
-                            port = port,
-                            code = code,
-                            onHost = { host = it },
-                            onPort = { port = it },
-                            onCode = { code = it },
-                            onPickFiles = { filePicker.launch(arrayOf("*/*")) },
-                            onPickFolder = { folderPicker.launch(null) },
-                        )
-                    }
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        HeaderMeta(state)
-                        TransfersCard(state, repository)
-                        HistoryCard(state)
-                    }
-                }
-            } else {
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Header(onSettings = { showSettings = true })
-                    HeaderMeta(state)
-                    ReceiveCard(state, repository, onChooseFolder = { destinationPicker.launch(null) })
-                    SendCard(
+            Header(state, onSettings = { tab = AppTab.Settings })
+            BoxWithConstraints(Modifier.weight(1f)) {
+                val wide = maxWidth > 900.dp
+                when (tab) {
+                    AppTab.Home -> HomeContent(
                         state = state,
                         repository = repository,
+                        wide = wide,
                         host = host,
                         port = port,
                         code = code,
@@ -208,9 +202,15 @@ fun ShadowScreen(repository: ShadowRepository) {
                         onCode = { code = it },
                         onPickFiles = { filePicker.launch(arrayOf("*/*")) },
                         onPickFolder = { folderPicker.launch(null) },
+                        onChooseDestination = { destinationPicker.launch(null) },
+                        onOpenActivity = { tab = AppTab.Activity },
                     )
-                    TransfersCard(state, repository)
-                    HistoryCard(state)
+                    AppTab.Activity -> ActivityContent(state, repository, wide)
+                    AppTab.Settings -> SettingsContent(
+                        state = state,
+                        repository = repository,
+                        onChooseDestination = { destinationPicker.launch(null) },
+                    )
                 }
             }
         }
@@ -219,8 +219,185 @@ fun ShadowScreen(repository: ShadowRepository) {
     state.approvals.firstOrNull()?.let { approval ->
         ApprovalDialog(approval, repository)
     }
-    if (showSettings) {
-        SettingsDialog(state, repository) { showSettings = false }
+}
+
+@Composable
+private fun HomeContent(
+    state: UiState,
+    repository: ShadowRepository,
+    wide: Boolean,
+    host: String,
+    port: String,
+    code: String,
+    onHost: (String) -> Unit,
+    onPort: (String) -> Unit,
+    onCode: (String) -> Unit,
+    onPickFiles: () -> Unit,
+    onPickFolder: () -> Unit,
+    onChooseDestination: () -> Unit,
+    onOpenActivity: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        ConnectionOverview(
+            state = state,
+            onSend = onPickFiles,
+            onReceive = { repository.setReceiveMode(!state.receiveOn) },
+            onScan = repository::scanDevices,
+        )
+        if (wide) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f)) {
+                    ReceiveCard(state, repository, onChooseFolder = onChooseDestination)
+                }
+                Column(Modifier.weight(1f)) {
+                    SendCard(
+                        state = state,
+                        repository = repository,
+                        host = host,
+                        port = port,
+                        code = code,
+                        onHost = onHost,
+                        onPort = onPort,
+                        onCode = onCode,
+                        onPickFiles = onPickFiles,
+                        onPickFolder = onPickFolder,
+                    )
+                }
+            }
+        } else {
+            ReceiveCard(state, repository, onChooseFolder = onChooseDestination)
+            SendCard(
+                state = state,
+                repository = repository,
+                host = host,
+                port = port,
+                code = code,
+                onHost = onHost,
+                onPort = onPort,
+                onCode = onCode,
+                onPickFiles = onPickFiles,
+                onPickFolder = onPickFolder,
+            )
+        }
+        TransfersCard(state, repository)
+        TextButton(onClick = onOpenActivity) { Text("Open activity") }
+    }
+}
+
+@Composable
+private fun ActivityContent(
+    state: UiState,
+    repository: ShadowRepository,
+    wide: Boolean,
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (wide) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f)) { TransfersCard(state, repository) }
+                Column(Modifier.weight(1f)) { HistoryCard(state) }
+            }
+        } else {
+            TransfersCard(state, repository)
+            HistoryCard(state)
+        }
+    }
+}
+
+@Composable
+private fun ConnectionOverview(
+    state: UiState,
+    onSend: () -> Unit,
+    onReceive: () -> Unit,
+    onScan: () -> Unit,
+) {
+    SectionCard(title = "CONNECTION") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    state.deviceName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary,
+                )
+                Text(
+                    if (state.receiveOn) "Receiving on port ${state.listeningPort ?: ShadowRepository.DEFAULT_PORT}"
+                    else "Ready to send or receive",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (state.receiveOn) Success else Muted,
+                )
+                Text(
+                    "${state.devices.size} nearby · ${state.trustedDevices.size} trusted",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Text(
+                if (state.receiveOn) "ONLINE" else "IDLE",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = if (state.receiveOn) Success else Muted,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = onSend,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(50.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Accent),
+            ) {
+                Text("Send files", fontWeight = FontWeight.SemiBold)
+            }
+            OutlinedButton(
+                onClick = onReceive,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(50.dp),
+                border = BorderStroke(1.dp, if (state.receiveOn) Success else Outline),
+            ) {
+                Text(
+                    if (state.receiveOn) "Stop receiving" else "Receive",
+                    color = if (state.receiveOn) Success else TextPrimary,
+                )
+            }
+        }
+        TextButton(onClick = onScan, enabled = !state.scanning) {
+            Text(if (state.scanning) "Scanning…" else "Scan for devices")
+        }
+    }
+}
+
+@Composable
+private fun Header(state: UiState, onSettings: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                "SHADOW TRANSFER",
+                style = MaterialTheme.typography.headlineMedium.copy(letterSpacing = 1.5.sp),
+                color = TextPrimary,
+            )
+            Text(
+                "${state.deviceName} · ${shortFingerprint(state.fingerprint)}",
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            )
+        }
+        IconButton(onClick = onSettings) {
+            Icon(Icons.Outlined.Settings, contentDescription = "Settings", tint = Muted)
+        }
     }
 }
 
@@ -238,15 +415,6 @@ private fun Header(onSettings: () -> Unit) {
 }
 
 @Composable
-private fun HeaderMeta(state: UiState) {
-    Text(
-        if (state.fingerprint.isBlank()) "Identity unavailable" else
-            "Device fingerprint ${shortFingerprint(state.fingerprint)}",
-        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-    )
-}
-
-@Composable
 private fun SectionCard(
     title: String,
     trailing: @Composable RowScope.() -> Unit = {},
@@ -254,13 +422,13 @@ private fun SectionCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = Surface),
         border = BorderStroke(1.dp, Outline),
     ) {
         Column(
-            Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -471,7 +639,7 @@ private fun SendCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = AccentDark),
+            colors = ButtonDefaults.buttonColors(containerColor = Accent),
         ) {
             Text("Send", fontWeight = FontWeight.SemiBold)
         }
@@ -649,51 +817,87 @@ private fun ApprovalDialog(approval: ApprovalUi, repository: ShadowRepository) {
 }
 
 @Composable
-private fun SettingsDialog(state: UiState, repository: ShadowRepository, onClose: () -> Unit) {
-    var name by remember { mutableStateOf(state.deviceName) }
-    AlertDialog(
-        onDismissRequest = onClose,
-        containerColor = Surface,
-        title = { Text("Settings", color = TextPrimary) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it.take(64) },
-                    label = { Text("Device name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = fieldColors(),
-                )
-                Text("IDENTITY FINGERPRINT", style = MaterialTheme.typography.labelSmall, color = Muted)
-                Text(
-                    state.fingerprint,
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                )
-                Text(
-                    "The identity key is stored in this app's private storage and never leaves the device.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    "Receive folder: ${state.destinationLabel}",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    "Changing the device name takes effect after restarting receive mode.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+private fun SettingsContent(
+    state: UiState,
+    repository: ShadowRepository,
+    onChooseDestination: () -> Unit,
+) {
+    var name by remember(state.deviceName) { mutableStateOf(state.deviceName) }
+    LaunchedEffect(Unit) { repository.refreshTrustedDevices() }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SectionCard(title = "DEVICE") {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it.take(64) },
+                label = { Text("Device name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = fieldColors(),
+            )
+            Button(
+                onClick = { repository.setDeviceName(name) },
+                colors = ButtonDefaults.buttonColors(containerColor = Accent),
+            ) {
+                Text("Save device name")
             }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                repository.setDeviceName(name)
-                onClose()
-            }) { Text("Save", color = Accent) }
-        },
-        dismissButton = {
-            TextButton(onClick = onClose) { Text("Close", color = Muted) }
-        },
-    )
+            Text(
+                "Changing the name takes effect after restarting receive mode.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
+        SectionCard(title = "STORAGE") {
+            Text(state.destinationLabel, color = TextPrimary)
+            OutlinedButton(onClick = onChooseDestination) { Text("Choose receive folder") }
+            Text(
+                "Received files are verified in app staging before they are copied into this folder.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
+        SectionCard(title = "IDENTITY") {
+            Text(
+                state.fingerprint,
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            )
+            Text(
+                "The identity key stays in this app's private storage and never leaves the device.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
+        SectionCard(title = "TRUSTED DEVICES") {
+            if (state.trustedDevices.isEmpty()) {
+                Text("No paired devices yet.", style = MaterialTheme.typography.bodySmall)
+            }
+            state.trustedDevices.forEach { device ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(device.name, color = TextPrimary)
+                        Text(
+                            shortFingerprint(device.fingerprint),
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            color = Muted,
+                        )
+                    }
+                    TextButton(onClick = { repository.revokeTrusted(device.fingerprint) }) {
+                        Text("Remove", color = Danger)
+                    }
+                }
+            }
+            Text(
+                "Removing a device requires it to pair again before its next transfer.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
 }
 
 @Composable

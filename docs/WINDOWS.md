@@ -5,8 +5,9 @@ Installer: `dist/ShadowTransfer-Setup.exe` (Inno Setup 6, per-user install, unsi
 
 ## Features
 
-- Dark, minimal egui UI with the Shadow Transfer branding.
-- Device list from LAN discovery (one 3-second scan at launch, plus manual **Scan**), trust badges, manual IP connection.
+- Premium dark UI (deep navy/charcoal, blue-to-cyan accents) with a navigation rail: Home, Send, Receive, Activity, Trusted devices, Settings, Advanced.
+- Home connection dashboard with quick Send/Receive actions, nearby devices, active transfers and recent activity.
+- Device list with continuous foreground auto-discovery (short scans every few seconds while focused), online/offline/last-seen state, trust badges and manual IP connection.
 - Drag-and-drop files and folders anywhere on the window; native file/folder pickers.
 - Separate **AUTO DISCOVERY** and **MANUAL CONNECTION** cards, each with its own pairing-code field. The port field accepts digits only.
 - A standalone **Pair** action: pairing no longer requires choosing files or starting a transfer.

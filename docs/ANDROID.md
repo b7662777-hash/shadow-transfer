@@ -2,7 +2,7 @@
 
 Package: `com.shadowtransfer.app`
 Min SDK: 26 · Target/compile SDK: 34 · ABIs packaged: `arm64-v8a`, `armeabi-v7a`, `x86_64`
-UI: Kotlin + Jetpack Compose (Material 3, AMOLED-friendly dark theme)
+UI: Kotlin + Jetpack Compose (Material 3, premium navy/blue-cyan dark theme, bottom navigation: Home, Activity, Settings)
 
 ## Build status
 
@@ -47,7 +47,8 @@ SAF URIs are not filesystem paths, so selected documents/folders are copied into
 
 - Receive mode starts a `dataSync` foreground service with a low-importance notification so transfers can continue while the app is not in the foreground. Android 14+ requires `FOREGROUND_SERVICE_DATA_SYNC`, which is declared.
 - Turning receive off stops the service and the Rust listener/advertiser.
-- No permanent wake or Wi-Fi lock is used. A `MulticastLock` is held only during an explicit device scan (3 seconds) so broadcast beacons are received. During an active transfer, a `WIFI_MODE_FULL_HIGH_PERF` Wi-Fi lock is held to avoid power-save latency spikes and is released when no transfer is active.
+- No permanent wake or Wi-Fi lock is used. A `MulticastLock` is held only during foreground discovery windows (automatic while the app is foreground, or manual) so broadcast beacons are received.
+- The trusted-device list is available in Settings; revoking a device removes its pin and requires pairing again. During an active transfer, a `WIFI_MODE_FULL_HIGH_PERF` Wi-Fi lock is held to avoid power-save latency spikes and is released when no transfer is active.
 - Doze and vendor battery management may still affect long background receives; the foreground service is the intended mitigation. This was not validated on the tablet.
 
 ## Permissions

@@ -33,7 +33,7 @@ Validation requires the exact magic, a valid device name, a non-zero port and a 
 - A short explicit scan (`discover_for`, 3 seconds) binds UDP 47830 with address reuse and collects the newest beacon per fingerprint.
 - The sender derives the device address from the datagram source IP plus the advertised TCP port, so it works across multiple interfaces.
 - Scanning stops at the end of the window. There is no background scan and no polling loop.
-- The Windows app performs one 3-second scan when it opens and whenever the user presses **Scan**. It never scans continuously. The Android app scans when the user presses **Scan** on the send panel.
+- The Windows app performs short discovery windows continuously while the window is focused (currently every few seconds), and immediately on **Scan**. The Android app runs foreground-only discovery automatically while the app is in the foreground, with a manual **Scan** action. Both stop when the app leaves the foreground/minimizes; there is no background scanning.
 - Devices are shown with a trust badge (Windows) based on the trust store. "code needed" means the device is discovered but not paired. Names and fingerprints are unauthenticated at this stage.
 
 ### Receiving side lifecycle

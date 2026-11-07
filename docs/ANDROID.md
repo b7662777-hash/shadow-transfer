@@ -2,7 +2,7 @@
 
 Package: `com.shadowtransfer.app`
 Min SDK: 26 · Target/compile SDK: 34 · ABIs packaged: `arm64-v8a`, `armeabi-v7a`, `x86_64`
-UI: Kotlin + Jetpack Compose (Material 3, AMOLED-friendly dark theme)
+UI: Kotlin + Jetpack Compose (Material 3, premium navy/blue-cyan dark theme, bottom navigation: Home, Activity, Settings)
 
 ## Build status
 

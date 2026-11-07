@@ -1,6 +1,6 @@
 # Shadow Transfer v0.2 Product Redesign Plan
 
-Status: M1 partially implemented on `redesign/v0.2` (Windows continuous discovery/last-seen/trusted selection; Android foreground auto-discovery and trusted-device list/revoke). QR and platform metadata remain in M1.
+Status: M1 and M2 implemented on `redesign/v0.2`. M1 delivers Windows continuous discovery/last-seen/trusted selection and Android foreground auto-discovery plus trusted-device list/revoke (QR and platform metadata remain). M2 delivers a shared navy/charcoal + blue-cyan design system, a Windows navigation shell with Home/Send/Receive/Activity/Trusted/Settings/Advanced, and Android bottom navigation with Home/Activity/Settings. Light theme, motion polish and the remaining M1 items are still open.
 Baseline: v0.1.0 (`main`, release published). The working transfer engine and protocol are preserved.
 
 ## 1. What exists today

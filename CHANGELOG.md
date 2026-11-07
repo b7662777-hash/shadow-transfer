@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- M2 premium design system: deep navy/charcoal surfaces, blue-to-cyan accents, rounded cards, consistent status colors.
+- Windows navigation shell with Home, Send, Receive, Activity, Trusted devices, Settings and Advanced screens; Home dashboard with quick actions.
+- Android Material 3 bottom navigation with Home, Activity and Settings; connection overview with large Send/Receive actions; inline settings and trusted-device management.
 - Windows foreground auto-discovery with online/offline/last-seen state and trusted-device auto-selection.
 - Android foreground auto-discovery and a trusted-device list with revoke.
 - Regression test for the device presence window.

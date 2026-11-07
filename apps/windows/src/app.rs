@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 use egui::{Align, Color32, Layout, RichText, Rounding, Stroke, Vec2};
-use shadow_crypto::{normalize_pairing_code, Identity, TrustStore, TrustedDevice};
+use shadow_crypto::{normalize_pairing_code, Identity, TrustStore};
 use shadow_discovery::{AdvertiseConfig, DiscoveredDevice};
 use shadow_transfer::{
     ApprovalKind, ApprovalNeeded, Direction, PairSummary, ProgressEvent, ReceiverConfig,
@@ -16,18 +16,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio_util::sync::CancellationToken;
 
 use crate::storage::{self, HistoryEntry, Settings};
-
-const BG: Color32 = Color32::from_rgb(8, 9, 11);
-const PANEL: Color32 = Color32::from_rgb(13, 14, 18);
-const CARD: Color32 = Color32::from_rgb(18, 20, 25);
-const BORDER: Color32 = Color32::from_rgb(33, 36, 44);
-const TEXT: Color32 = Color32::from_rgb(231, 233, 239);
-const MUTED: Color32 = Color32::from_rgb(142, 148, 160);
-const ACCENT: Color32 = Color32::from_rgb(143, 126, 255);
-const ACCENT_DARK: Color32 = Color32::from_rgb(62, 51, 122);
-const GREEN: Color32 = Color32::from_rgb(74, 222, 128);
-const RED: Color32 = Color32::from_rgb(248, 113, 113);
-const YELLOW: Color32 = Color32::from_rgb(250, 204, 21);
+use crate::theme::*;
 
 enum AppEvent {
     ReceiverStarted {
@@ -143,9 +132,52 @@ struct SettingsDraft {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Tab {
-    Transfers,
-    History,
+enum Screen {
+    Home,
+    Send,
+    Receive,
+    Activity,
+    Trusted,
+    Settings,
+    Advanced,
+}
+
+impl Screen {
+    fn title(self) -> &'static str {
+        match self {
+            Self::Home => "Home",
+            Self::Send => "Send files",
+            Self::Receive => "Receive files",
+            Self::Activity => "Activity",
+            Self::Trusted => "Trusted devices",
+            Self::Settings => "Settings",
+            Self::Advanced => "Advanced",
+        }
+    }
+
+    fn subtitle(self) -> &'static str {
+        match self {
+            Self::Home => "Direct, encrypted transfers on your local network.",
+            Self::Send => "Pair once, then choose files and a device.",
+            Self::Receive => "Be discoverable and approve incoming transfers.",
+            Self::Activity => "Transfers, history and results.",
+            Self::Trusted => "Devices you have explicitly approved.",
+            Self::Settings => "Device, storage and receive preferences.",
+            Self::Advanced => "Runtime, network and identity diagnostics.",
+        }
+    }
+
+    fn nav_label(self) -> &'static str {
+        match self {
+            Self::Home => "Home",
+            Self::Send => "Send",
+            Self::Receive => "Receive",
+            Self::Activity => "Activity",
+            Self::Trusted => "Trusted devices",
+            Self::Settings => "Settings",
+            Self::Advanced => "Advanced",
+        }
+    }
 }
 
 struct Toast {
@@ -189,9 +221,8 @@ pub struct ShadowApp {
     peer_names: HashMap<String, String>,
     cards: Vec<TransferCard>,
     send_dialog: Option<SendDialog>,
-    settings_open: bool,
     settings_draft: Option<SettingsDraft>,
-    tab: Tab,
+    screen: Screen,
     toast: Option<Toast>,
     auto_approve: bool,
     demo_autosend: Option<(SocketAddr, String)>,
@@ -267,9 +298,8 @@ impl ShadowApp {
             peer_names: HashMap::new(),
             cards: Vec::new(),
             send_dialog: None,
-            settings_open: false,
             settings_draft: None,
-            tab: Tab::Transfers,
+            screen: Screen::Home,
             toast: None,
             auto_approve: cfg!(debug_assertions)
                 && std::env::var_os("SHADOW_UI_AUTO_APPROVE").is_some(),
@@ -297,6 +327,19 @@ impl ShadowApp {
         if cfg!(debug_assertions) {
             if let Ok(path) = std::env::var("SHADOW_UI_DEMO_FILES") {
                 app.add_paths(vec![PathBuf::from(path)]);
+            }
+        }
+        if cfg!(debug_assertions) {
+            if let Ok(screen) = std::env::var("SHADOW_UI_SCREEN") {
+                app.screen = match screen.to_ascii_lowercase().as_str() {
+                    "send" => Screen::Send,
+                    "receive" => Screen::Receive,
+                    "activity" => Screen::Activity,
+                    "trusted" => Screen::Trusted,
+                    "settings" => Screen::Settings,
+                    "advanced" => Screen::Advanced,
+                    _ => Screen::Home,
+                };
             }
         }
         app.start_discovery();
@@ -1103,13 +1146,21 @@ impl ShadowApp {
         self.spawn_pair(addr, self.manual_code.clone());
     }
 
-    fn open_settings(&mut self) {
-        self.settings_draft = Some(SettingsDraft {
-            device_name: self.settings.device_name.clone(),
-            download_dir: self.settings.download_dir.clone(),
-            receive_port: self.settings.receive_port,
-        });
-        self.settings_open = true;
+    fn ensure_settings_draft(&mut self) {
+        if self.settings_draft.is_none() {
+            self.settings_draft = Some(SettingsDraft {
+                device_name: self.settings.device_name.clone(),
+                download_dir: self.settings.download_dir.clone(),
+                receive_port: self.settings.receive_port,
+            });
+        }
+    }
+
+    fn navigate(&mut self, screen: Screen) {
+        if screen == Screen::Settings {
+            self.ensure_settings_draft();
+        }
+        self.screen = screen;
     }
 
     fn save_settings(&mut self) {
@@ -1135,7 +1186,6 @@ impl ShadowApp {
                 || new_settings.download_dir != self.settings.download_dir);
         self.settings = new_settings;
         self.manual_port = self.settings.receive_port.to_string();
-        self.settings_open = false;
         self.settings_draft = None;
         if needs_restart {
             self.stop_receiving();
@@ -1170,40 +1220,109 @@ impl ShadowApp {
             || self.cards.iter().any(TransferCard::is_active)
     }
 
-    fn header(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::top("header")
+    fn nav_panel(&mut self, ctx: &egui::Context) {
+        egui::SidePanel::left("nav")
+            .exact_width(224.0)
+            .resizable(false)
+            .frame(
+                egui::Frame::none()
+                    .fill(NAV_BG)
+                    .inner_margin(egui::Margin::symmetric(16.0, 22.0))
+                    .stroke(Stroke::new(1.0_f32, BORDER)),
+            )
+            .show(ctx, |ui| {
+                ui.label(RichText::new("SHADOW").size(12.0).strong().color(CYAN));
+                ui.label(RichText::new("TRANSFER").size(23.0).strong().color(TEXT));
+                ui.label(
+                    RichText::new("Transfer Without Limits.")
+                        .size(11.0)
+                        .color(MUTED),
+                );
+                ui.add_space(24.0);
+                for screen in [
+                    Screen::Home,
+                    Screen::Send,
+                    Screen::Receive,
+                    Screen::Activity,
+                    Screen::Trusted,
+                    Screen::Settings,
+                    Screen::Advanced,
+                ] {
+                    let selected = self.screen == screen;
+                    let button = egui::Button::new(
+                        RichText::new(screen.nav_label())
+                            .size(14.0)
+                            .color(if selected { Color32::WHITE } else { MUTED }),
+                    )
+                    .fill(if selected {
+                        PRIMARY
+                    } else {
+                        Color32::TRANSPARENT
+                    })
+                    .stroke(Stroke::new(
+                        1.0_f32,
+                        if selected { CYAN } else { Color32::TRANSPARENT },
+                    ))
+                    .rounding(Rounding::same(10.0));
+                    if ui
+                        .add_sized(egui::vec2(ui.available_width(), 38.0), button)
+                        .clicked()
+                    {
+                        self.navigate(screen);
+                    }
+                    ui.add_space(3.0);
+                }
+
+                ui.with_layout(Layout::bottom_up(Align::LEFT), |ui| {
+                    ui.label(
+                        RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
+                            .small()
+                            .color(MUTED),
+                    );
+                    ui.add_space(6.0);
+                    if let Some(peer) = self.selected_peer() {
+                        ui.label(RichText::new("TARGET").size(9.0).color(MUTED));
+                        ui.label(RichText::new(&peer.name).size(12.0).color(TEXT));
+                    } else {
+                        ui.label(RichText::new("No target selected").small().color(MUTED));
+                    }
+                    ui.add_space(8.0);
+                    ui.separator();
+                    if self.receive_requested {
+                        ui.label(RichText::new("Receive mode ON").small().color(GREEN));
+                    } else {
+                        ui.label(RichText::new("Receive mode off").small().color(MUTED));
+                    }
+                });
+            });
+    }
+
+    fn top_bar(&mut self, ctx: &egui::Context) {
+        egui::TopBottomPanel::top("topbar")
             .frame(
                 egui::Frame::none()
                     .fill(PANEL)
-                    .inner_margin(egui::Margin::symmetric(20.0, 14.0))
+                    .inner_margin(egui::Margin::symmetric(24.0, 14.0))
                     .stroke(Stroke::new(1.0_f32, BORDER)),
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.label(
-                            RichText::new("SHADOW TRANSFER")
-                                .size(21.0)
+                            RichText::new(self.screen.title())
+                                .size(20.0)
                                 .strong()
                                 .color(TEXT),
                         );
-                        ui.label(
-                            RichText::new("Transfer Without Limits.")
-                                .size(11.0)
-                                .color(MUTED),
-                        );
+                        ui.label(RichText::new(self.screen.subtitle()).small().color(MUTED));
                     });
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if ui.button("Settings").clicked() {
-                            self.open_settings();
-                        }
-                        let mut want = self.receive_requested;
                         let label = if self.receiver_starting {
-                            "Starting…"
+                            "Starting..."
                         } else if self.receive_requested {
-                            "Receive: ON"
+                            "Receive ON"
                         } else {
-                            "Receive: OFF"
+                            "Receive OFF"
                         };
                         if ui
                             .add(
@@ -1215,7 +1334,7 @@ impl ShadowApp {
                                 .fill(if self.receive_requested {
                                     ACCENT_DARK
                                 } else {
-                                    CARD
+                                    Color32::TRANSPARENT
                                 })
                                 .stroke(Stroke::new(
                                     1.0_f32,
@@ -1228,51 +1347,803 @@ impl ShadowApp {
                             )
                             .clicked()
                         {
-                            want = !want;
-                            if want {
-                                self.start_receiving();
-                            } else {
+                            if self.receive_requested {
                                 self.stop_receiving();
+                            } else {
+                                self.start_receiving();
                             }
                         }
-                        let (status, color) = if self.receiver.is_some() {
-                            ("Listening", GREEN)
-                        } else if self.receiver_starting {
-                            ("Starting", YELLOW)
-                        } else {
-                            ("Offline", MUTED)
-                        };
-                        ui.label(RichText::new(status).small().color(color));
+                        let online = self
+                            .peers
+                            .iter()
+                            .filter(|peer| !peer.manual && peer_is_online(peer))
+                            .count();
+                        let trusted = self.trust.list().map(|devices| devices.len()).unwrap_or(0);
+                        ui.label(
+                            RichText::new(format!("{online} online · {trusted} trusted"))
+                                .small()
+                                .color(MUTED),
+                        );
                     });
                 });
             });
     }
 
-    fn side_panel(&mut self, ctx: &egui::Context) {
-        egui::SidePanel::left("sidebar")
-            .exact_width(372.0)
-            .resizable(false)
+    fn screen_content(&mut self, ctx: &egui::Context) {
+        egui::CentralPanel::default()
             .frame(
                 egui::Frame::none()
                     .fill(BG)
-                    .inner_margin(egui::Margin::symmetric(16.0, 12.0)),
+                    .inner_margin(egui::Margin::symmetric(24.0, 18.0)),
             )
             .show(ctx, |ui| {
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        self.devices_section(ui);
-                        ui.add_space(10.0);
-                        ui.separator();
-                        ui.add_space(10.0);
-                        self.files_section(ui);
-                        if self.receive_requested || self.receiver.is_some() {
-                            ui.add_space(10.0);
-                            ui.separator();
-                            ui.add_space(10.0);
-                            self.receive_section(ui);
+                self.toast_bar(ui);
+                match self.screen {
+                    Screen::Home => self.home_screen(ui),
+                    Screen::Send => self.send_screen(ui),
+                    Screen::Receive => self.receive_screen(ui),
+                    Screen::Activity => self.activity_screen(ui),
+                    Screen::Trusted => self.trusted_screen(ui),
+                    Screen::Settings => self.settings_screen(ui),
+                    Screen::Advanced => self.advanced_screen(ui),
+                }
+            });
+    }
+
+    fn home_screen(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                if !self.approvals.is_empty() {
+                    surface_frame()
+                        .stroke(Stroke::new(1.0_f32, YELLOW))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new(format!(
+                                        "{} approval request(s) waiting",
+                                        self.approvals.len()
+                                    ))
+                                    .color(YELLOW),
+                                );
+                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                    if ui.button("Review").clicked() {
+                                        self.navigate(Screen::Receive);
+                                    }
+                                });
+                            });
+                        });
+                    ui.add_space(12.0);
+                }
+
+                self.connection_hero(ui);
+                ui.add_space(14.0);
+
+                let online = self
+                    .peers
+                    .iter()
+                    .filter(|peer| !peer.manual && peer_is_online(peer))
+                    .count();
+                let trusted = self.trust.list().map(|devices| devices.len()).unwrap_or(0);
+                let active = self.cards.iter().filter(|card| card.is_active()).count();
+                ui.columns(3, |columns| {
+                    stat_card(&mut columns[0], "ONLINE DEVICES", online.to_string(), CYAN);
+                    stat_card(&mut columns[1], "TRUSTED", trusted.to_string(), GREEN);
+                    stat_card(
+                        &mut columns[2],
+                        "ACTIVE TRANSFERS",
+                        active.to_string(),
+                        if active > 0 { ACCENT } else { MUTED },
+                    );
+                });
+                ui.add_space(14.0);
+
+                let width = ui.available_width();
+                let button_width = (width - 12.0) / 2.0;
+                ui.horizontal(|ui| {
+                    let send = egui::Button::new(
+                        RichText::new("SEND FILES\nChoose files, then a nearby device")
+                            .size(15.0)
+                            .strong()
+                            .color(Color32::WHITE),
+                    )
+                    .fill(PRIMARY)
+                    .rounding(Rounding::same(14.0));
+                    if ui.add_sized(egui::vec2(button_width, 68.0), send).clicked() {
+                        self.navigate(Screen::Send);
+                    }
+                    let receive_label = if self.receive_requested {
+                        "RECEIVE READY\nOpen receive controls"
+                    } else {
+                        "RECEIVE FILES\nTurn on receive mode"
+                    };
+                    let receive = egui::Button::new(
+                        RichText::new(receive_label).size(15.0).strong().color(TEXT),
+                    )
+                    .fill(CARD)
+                    .stroke(Stroke::new(
+                        1.0_f32,
+                        if self.receive_requested {
+                            GREEN
+                        } else {
+                            BORDER
+                        },
+                    ))
+                    .rounding(Rounding::same(14.0));
+                    if ui
+                        .add_sized(egui::vec2(button_width, 68.0), receive)
+                        .clicked()
+                    {
+                        if !self.receive_requested {
+                            self.start_receiving();
+                        }
+                        self.navigate(Screen::Receive);
+                    }
+                });
+                ui.add_space(20.0);
+
+                self.home_nearby(ui);
+                ui.add_space(18.0);
+                self.home_transfers(ui);
+                ui.add_space(18.0);
+                self.home_recent(ui);
+            });
+    }
+
+    fn connection_hero(&mut self, ui: &mut egui::Ui) {
+        let selected = self.selected_peer();
+        let trusted = selected
+            .as_ref()
+            .map(|peer| peer_trusted(&self.trust, peer))
+            .unwrap_or(false);
+        let online = selected.as_ref().map(peer_is_online).unwrap_or(false);
+        let (status, status_color) = if trusted && online {
+            ("READY", GREEN)
+        } else if trusted {
+            ("PAIRED · OFFLINE", YELLOW)
+        } else if selected.is_some() {
+            ("CODE NEEDED", YELLOW)
+        } else if self.discovery_running {
+            ("SEARCHING", CYAN)
+        } else {
+            ("NO DEVICE", MUTED)
+        };
+        surface_frame()
+            .stroke(Stroke::new(
+                1.0_f32,
+                if trusted && online { GREEN } else { BORDER },
+            ))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        section_label(ui, "CONNECTION");
+                        ui.label(
+                            RichText::new(
+                                selected
+                                    .as_ref()
+                                    .map(|peer| peer.name.as_str())
+                                    .unwrap_or("No device selected"),
+                            )
+                            .size(23.0)
+                            .strong()
+                            .color(TEXT),
+                        );
+                        ui.label(
+                            RichText::new(match &selected {
+                                Some(peer) => format!(
+                                    "{} · {}",
+                                    peer.addr,
+                                    if trusted { "paired and verified" } else { "pairing required" }
+                                ),
+                                None => "Scan for a device or use Manual connection.".to_string(),
+                            })
+                            .small()
+                            .color(MUTED),
+                        );
+                    });
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        ui.label(RichText::new(status).strong().color(status_color));
+                        if ui.button("Rescan").clicked() {
+                            self.start_discovery();
                         }
                     });
+                });
+                if selected.is_some() && !trusted {
+                    ui.add_space(6.0);
+                    ui.label(
+                        RichText::new(
+                            "Open Send, enter the tablet's pairing code, and approve the request on the tablet.",
+                        )
+                        .small()
+                        .color(YELLOW),
+                    );
+                }
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Open Send").clicked() {
+                        self.navigate(Screen::Send);
+                    }
+                    if ui.button("Open Receive").clicked() {
+                        self.navigate(Screen::Receive);
+                    }
+                    if self.receive_requested {
+                        ui.label(RichText::new("Receiving is active").small().color(GREEN));
+                    } else {
+                        ui.label(RichText::new("Receiving is off").small().color(MUTED));
+                    }
+                });
+            });
+    }
+
+    fn home_nearby(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            section_label(ui, "NEARBY DEVICES");
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if ui.button("Manage").clicked() {
+                    self.navigate(Screen::Send);
+                }
+            });
+        });
+        let peers: Vec<PeerView> = self.peers.clone();
+        if peers.is_empty() {
+            surface_frame().show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.label(
+                    RichText::new(
+                        "No devices yet. Turn on Receive on the other device and wait for discovery.",
+                    )
+                    .small()
+                    .color(MUTED),
+                );
+                if ui.button("Scan now").clicked() {
+                    self.start_discovery();
+                }
+            });
+            return;
+        }
+        for peer in peers.iter().take(3) {
+            let trusted = peer_trusted(&self.trust, peer);
+            let selected = self.selected_addr == Some(peer.addr);
+            surface_frame().show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.label(RichText::new(&peer.name).strong().color(TEXT));
+                        ui.label(
+                            RichText::new(format!(
+                                "{} · {}",
+                                peer.addr,
+                                if trusted { "trusted" } else { "code needed" }
+                            ))
+                            .small()
+                            .color(if trusted {
+                                GREEN
+                            } else {
+                                YELLOW
+                            }),
+                        );
+                    });
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if selected {
+                            ui.label(RichText::new("Selected").small().color(ACCENT));
+                        } else if ui.button("Select").clicked() {
+                            self.selected_addr = Some(peer.addr);
+                        }
+                    });
+                });
+            });
+            ui.add_space(6.0);
+        }
+    }
+
+    fn home_transfers(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            section_label(ui, "ACTIVE TRANSFERS");
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if ui.button("Open activity").clicked() {
+                    self.navigate(Screen::Activity);
+                }
+            });
+        });
+        let active: Vec<&TransferCard> = self
+            .cards
+            .iter()
+            .filter(|card| card.is_active())
+            .take(2)
+            .collect();
+        if active.is_empty() {
+            ui.label(RichText::new("No active transfers.").small().color(MUTED));
+            return;
+        }
+        for card in active {
+            surface_frame().show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(&card.peer).small().color(MUTED));
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        ui.label(
+                            RichText::new(phase_label(card.phase).0)
+                                .small()
+                                .color(phase_label(card.phase).1),
+                        );
+                    });
+                });
+                ui.label(
+                    RichText::new(if card.file_name.is_empty() {
+                        format!("{} file(s)", card.file_count)
+                    } else {
+                        card.file_name.clone()
+                    })
+                    .color(TEXT),
+                );
+                ui.add(egui::ProgressBar::new(card.percent()).fill(PRIMARY));
+                ui.label(
+                    RichText::new(format!(
+                        "{} · {}",
+                        shadow_transfer::util::format_speed(card.speed_bps),
+                        shadow_transfer::util::format_eta(card.eta_secs)
+                    ))
+                    .small()
+                    .color(MUTED),
+                );
+            });
+            ui.add_space(6.0);
+        }
+    }
+
+    fn home_recent(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            section_label(ui, "RECENT");
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if !self.history.is_empty() && ui.button("View all").clicked() {
+                    self.navigate(Screen::Activity);
+                }
+            });
+        });
+        if self.history.is_empty() {
+            ui.label(
+                RichText::new("Completed transfers will appear here.")
+                    .small()
+                    .color(MUTED),
+            );
+            return;
+        }
+        for entry in self.history.iter().take(4) {
+            surface_frame().show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(&entry.peer).color(TEXT));
+                    ui.label(
+                        RichText::new(format!(
+                            "{} · {} · {}",
+                            entry.direction,
+                            shadow_transfer::util::format_bytes(entry.bytes),
+                            entry.status
+                        ))
+                        .small()
+                        .color(MUTED),
+                    );
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        ui.label(
+                            RichText::new(storage::relative_time(entry.at))
+                                .small()
+                                .color(MUTED),
+                        );
+                    });
+                });
+            });
+            ui.add_space(4.0);
+        }
+    }
+
+    fn send_screen(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                section_label(ui, "CONNECT & SEND");
+                ui.label(
+                    RichText::new(
+                        "Pair a device once. After it is trusted, select files and press Send.",
+                    )
+                    .small()
+                    .color(MUTED),
+                );
+                ui.add_space(8.0);
+                ui.columns(2, |columns| {
+                    self.devices_section(&mut columns[0]);
+                    self.files_section(&mut columns[1]);
+                });
+                if self.cards.iter().any(TransferCard::is_active) {
+                    ui.add_space(18.0);
+                    section_label(ui, "CURRENT TRANSFERS");
+                    self.transfers_view(ui);
+                }
+            });
+    }
+
+    fn receive_screen(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                surface_frame().show(ui, |ui| {
+                    ui.set_min_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        ui.vertical(|ui| {
+                            section_label(ui, "RECEIVE MODE");
+                            ui.label(
+                                RichText::new(if self.receive_requested {
+                                    "Discoverable and ready"
+                                } else {
+                                    "Off"
+                                })
+                                .size(20.0)
+                                .strong()
+                                .color(if self.receive_requested { GREEN } else { TEXT }),
+                            );
+                        });
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if ui
+                                .button(if self.receive_requested {
+                                    "Turn off receive"
+                                } else {
+                                    "Turn on receive"
+                                })
+                                .clicked()
+                            {
+                                if self.receive_requested {
+                                    self.stop_receiving();
+                                } else {
+                                    self.start_receiving();
+                                }
+                            }
+                        });
+                    });
+                });
+                ui.add_space(12.0);
+                self.receive_section(ui);
+                ui.add_space(18.0);
+                section_label(ui, "INCOMING REQUESTS");
+                let approvals: Vec<ApprovalNeeded> = self.approvals.iter().cloned().collect();
+                if approvals.is_empty() {
+                    ui.label(RichText::new("No pending requests.").small().color(MUTED));
+                }
+                let mut decisions: Vec<(String, bool)> = Vec::new();
+                for approval in approvals {
+                    surface_frame()
+                        .stroke(Stroke::new(1.0_f32, YELLOW))
+                        .show(ui, |ui| {
+                            ui.label(RichText::new(approval.kind.label()).strong().color(TEXT));
+                            ui.label(RichText::new(approval.kind.summary()).small().color(MUTED));
+                            ui.horizontal(|ui| {
+                                if ui
+                                    .add(
+                                        egui::Button::new(
+                                            RichText::new("Approve").strong().color(Color32::WHITE),
+                                        )
+                                        .fill(PRIMARY),
+                                    )
+                                    .clicked()
+                                {
+                                    decisions.push((approval.id.clone(), true));
+                                }
+                                if ui.button("Decline").clicked() {
+                                    decisions.push((approval.id.clone(), false));
+                                }
+                            });
+                        });
+                    ui.add_space(8.0);
+                }
+                for (id, accepted) in decisions {
+                    if let Some(handle) = &self.receiver {
+                        let _ = handle.respond(&id, accepted);
+                    }
+                    self.approvals.retain(|approval| approval.id != id);
+                }
+                ui.add_space(8.0);
+                if ui.button("Open receive folder").clicked() {
+                    let _ = std::process::Command::new("explorer")
+                        .arg(&self.settings.download_dir)
+                        .spawn();
+                }
+            });
+    }
+
+    fn activity_screen(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                section_label(ui, "TRANSFERS");
+                self.transfers_view(ui);
+                ui.add_space(20.0);
+                section_label(ui, "HISTORY");
+                self.history_view(ui);
+            });
+    }
+
+    fn trusted_screen(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                surface_frame().show(ui, |ui| {
+                    ui.set_min_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        ui.vertical(|ui| {
+                            section_label(ui, "THIS DEVICE");
+                            ui.label(
+                                RichText::new(self.settings.device_name.clone())
+                                    .size(20.0)
+                                    .strong()
+                                    .color(TEXT),
+                            );
+                            ui.label(
+                                RichText::new(self.identity.fingerprint_hex())
+                                    .monospace()
+                                    .small()
+                                    .color(MUTED),
+                            );
+                        });
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if ui.button("Copy fingerprint").clicked() {
+                                ui.ctx().copy_text(self.identity.fingerprint_hex());
+                            }
+                        });
+                    });
+                });
+                ui.add_space(16.0);
+                section_label(ui, "TRUSTED DEVICES");
+                let devices = self.trust.list().unwrap_or_default();
+                let mut revoke: Option<[u8; 32]> = None;
+                if devices.is_empty() {
+                    ui.label(
+                        RichText::new("No devices paired yet. Use Send to pair one.")
+                            .small()
+                            .color(MUTED),
+                    );
+                }
+                for device in devices {
+                    surface_frame().show(ui, |ui| {
+                        ui.set_min_width(ui.available_width());
+                        ui.horizontal(|ui| {
+                            ui.vertical(|ui| {
+                                ui.label(RichText::new(&device.name).strong().color(TEXT));
+                                ui.label(
+                                    RichText::new(&device.fingerprint)
+                                        .monospace()
+                                        .small()
+                                        .color(MUTED),
+                                );
+                                ui.label(
+                                    RichText::new(format!(
+                                        "last seen {}",
+                                        storage::relative_time(device.last_seen)
+                                    ))
+                                    .small()
+                                    .color(MUTED),
+                                );
+                            });
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                if ui.button("Revoke").clicked() {
+                                    if let Some(fingerprint) =
+                                        parse_fingerprint(&device.fingerprint)
+                                    {
+                                        revoke = Some(fingerprint);
+                                    }
+                                }
+                            });
+                        });
+                    });
+                    ui.add_space(6.0);
+                }
+                if let Some(fingerprint) = revoke {
+                    match self.trust.revoke(&fingerprint) {
+                        Ok(_) => self.set_toast("Device trust revoked", false),
+                        Err(err) => self.set_toast(format!("Cannot revoke device: {err}"), true),
+                    }
+                }
+            });
+    }
+
+    fn settings_screen(&mut self, ui: &mut egui::Ui) {
+        if self.settings_draft.is_none() {
+            self.ensure_settings_draft();
+            return;
+        }
+        let Some(mut draft) = self.settings_draft.take() else {
+            return;
+        };
+        let mut save = false;
+        let mut discard = false;
+        let mut change_folder = false;
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                surface_frame().show(ui, |ui| {
+                    ui.set_min_width(ui.available_width());
+                    section_label(ui, "DEVICE");
+                    ui.horizontal(|ui| {
+                        ui.label("Name");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut draft.device_name).desired_width(260.0),
+                        );
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Receive port");
+                        ui.add(egui::DragValue::new(&mut draft.receive_port).range(1024..=65535));
+                    });
+                    ui.add_space(8.0);
+                    section_label(ui, "STORAGE");
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            RichText::new(draft.download_dir.display().to_string())
+                                .small()
+                                .color(TEXT),
+                        );
+                        if ui.button("Change folder").clicked() {
+                            change_folder = true;
+                        }
+                    });
+                    ui.add_space(8.0);
+                    section_label(ui, "IDENTITY");
+                    ui.label(
+                        RichText::new(self.identity.fingerprint_hex())
+                            .monospace()
+                            .small()
+                            .color(MUTED),
+                    );
+                    ui.label(
+                        RichText::new(format!("Data: {}", self.data_dir.display()))
+                            .small()
+                            .color(MUTED),
+                    );
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    RichText::new("Save").strong().color(Color32::WHITE),
+                                )
+                                .fill(PRIMARY),
+                            )
+                            .clicked()
+                        {
+                            save = true;
+                        }
+                        if ui.button("Discard changes").clicked() {
+                            discard = true;
+                        }
+                    });
+                });
+                ui.add_space(16.0);
+                surface_frame().show(ui, |ui| {
+                    ui.set_min_width(ui.available_width());
+                    section_label(ui, "TRUSTED DEVICES");
+                    let count = self.trust.list().map(|devices| devices.len()).unwrap_or(0);
+                    ui.label(
+                        RichText::new(format!("{count} device(s) paired"))
+                            .small()
+                            .color(MUTED),
+                    );
+                    if ui.button("Manage trusted devices").clicked() {
+                        self.navigate(Screen::Trusted);
+                    }
+                });
+                ui.add_space(16.0);
+                surface_frame().show(ui, |ui| {
+                    ui.set_min_width(ui.available_width());
+                    section_label(ui, "ADVANCED");
+                    ui.label(
+                        RichText::new("Network information, ports, identity and diagnostics.")
+                            .small()
+                            .color(MUTED),
+                    );
+                    if ui.button("Open advanced").clicked() {
+                        self.navigate(Screen::Advanced);
+                    }
+                });
+            });
+        if change_folder {
+            if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                draft.download_dir = folder;
+            }
+        }
+        if save {
+            self.settings_draft = Some(draft);
+            self.save_settings();
+        } else if discard {
+            self.settings_draft = None;
+        } else {
+            self.settings_draft = Some(draft);
+        }
+    }
+
+    fn advanced_screen(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                surface_frame().show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                    section_label(ui, "NETWORK");
+                    let local_ip = local_ipv4().unwrap_or_else(|| "Unavailable".into());
+                    info_row(ui, "Local IPv4", &local_ip);
+                    info_row(
+                        ui,
+                        "Receive",
+                        if self.receive_requested { "On" } else { "Off" },
+                    );
+                    info_row(
+                        ui,
+                        "Transfer port",
+                        &self.settings.receive_port.to_string(),
+                    );
+                    info_row(ui, "Discovery port (UDP)", "47830");
+                    info_row(ui, "Protocol", "Shadow Transfer v1");
+                    info_row(ui, "Transport", "TLS 1.3 · mutual certificates");
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("Run discovery now").clicked() {
+                            self.start_discovery();
+                        }
+                        if ui.button("Open data folder").clicked() {
+                            let _ = std::process::Command::new("explorer")
+                                .arg(&self.data_dir)
+                                .spawn();
+                        }
+                        if ui.button("Copy diagnostics").clicked() {
+                            let text = format!(
+                                "Shadow Transfer {}\nDevice: {}\nFingerprint: {}\nLocal IPv4: {}\nReceive: {}\nTransfer port: {}\nDiscovery port: 47830\nProtocol: v1\nTrusted devices: {}\nData: {}",
+                                env!("CARGO_PKG_VERSION"),
+                                self.settings.device_name,
+                                self.identity.fingerprint_hex(),
+                                local_ip,
+                                self.receive_requested,
+                                self.settings.receive_port,
+                                self.trust.list().map(|devices| devices.len()).unwrap_or(0),
+                                self.data_dir.display()
+                            );
+                            ui.ctx().copy_text(text);
+                        }
+                    });
+                });
+                ui.add_space(16.0);
+                surface_frame().show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                    section_label(ui, "TRANSFER");
+                    info_row(ui, "Chunking", "Adaptive · 256 KiB–4 MiB");
+                    info_row(ui, "TCP buffers", "8 MiB requested (best effort)");
+                    info_row(ui, "Integrity", "Per-chunk + full-file BLAKE3");
+                    info_row(ui, "Resume", "Verified prefix");
+                    info_row(ui, "Receiver connection limit", "4");
+                });
+                ui.add_space(16.0);
+                surface_frame().show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                    section_label(ui, "IDENTITY");
+                    ui.label(
+                        RichText::new(self.identity.fingerprint_hex())
+                            .monospace()
+                            .small()
+                            .color(MUTED),
+                    );
+                    ui.horizontal(|ui| {
+                        if ui.button("Copy fingerprint").clicked() {
+                            ui.ctx().copy_text(self.identity.fingerprint_hex());
+                        }
+                        if ui.button("Manage trusted devices").clicked() {
+                            self.navigate(Screen::Trusted);
+                        }
+                    });
+                });
+                ui.add_space(16.0);
+                surface_frame().show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                    section_label(ui, "LOGS");
+                    info_row(ui, "Data directory", &self.data_dir.display().to_string());
+                    ui.label(
+                        RichText::new("Daily logs are written as shadow.log.YYYY-MM-DD.")
+                            .small()
+                            .color(MUTED),
+                    );
+                });
             });
     }
 
@@ -1769,49 +2640,6 @@ impl ShadowApp {
         );
     }
 
-    fn central_panel(&mut self, ctx: &egui::Context) {
-        egui::CentralPanel::default()
-            .frame(
-                egui::Frame::none()
-                    .fill(BG)
-                    .inner_margin(egui::Margin::symmetric(22.0, 18.0)),
-            )
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    if ui
-                        .selectable_label(self.tab == Tab::Transfers, "Transfers")
-                        .clicked()
-                    {
-                        self.tab = Tab::Transfers;
-                    }
-                    if ui
-                        .selectable_label(self.tab == Tab::History, "History")
-                        .clicked()
-                    {
-                        self.tab = Tab::History;
-                    }
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        let active = self.cards.iter().filter(|c| c.is_active()).count();
-                        if active > 0 {
-                            ui.label(
-                                RichText::new(format!("{active} active"))
-                                    .small()
-                                    .color(ACCENT),
-                            );
-                        }
-                    });
-                });
-                ui.add_space(6.0);
-                self.toast_bar(ui);
-                ui.separator();
-                ui.add_space(8.0);
-                match self.tab {
-                    Tab::Transfers => self.transfers_view(ui),
-                    Tab::History => self.history_view(ui),
-                }
-            });
-    }
-
     fn toast_bar(&mut self, ui: &mut egui::Ui) {
         let Some(toast) = self.toast.as_ref() else {
             return;
@@ -1858,6 +2686,7 @@ impl ShadowApp {
         let mut retry: Option<usize> = None;
         let mut dismiss: Option<usize> = None;
         egui::ScrollArea::vertical()
+            .max_height(420.0)
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 for (index, card) in self.cards.iter().enumerate() {
@@ -2034,6 +2863,7 @@ impl ShadowApp {
         });
         ui.add_space(4.0);
         egui::ScrollArea::vertical()
+            .max_height(420.0)
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 egui::Grid::new("history-grid")
@@ -2252,135 +3082,6 @@ impl ShadowApp {
         }
     }
 
-    fn settings_window(&mut self, ctx: &egui::Context) {
-        if !self.settings_open {
-            return;
-        }
-        let Some(mut draft) = self.settings_draft.take() else {
-            return;
-        };
-        let mut save = false;
-        let mut close = false;
-        let mut revoke: Option<[u8; 32]> = None;
-        let mut change_folder = false;
-        egui::Window::new("Settings")
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
-            .default_width(520.0)
-            .show(ctx, |ui| {
-                ui.label(RichText::new("DEVICE").size(10.0).strong().color(MUTED));
-                ui.horizontal(|ui| {
-                    ui.label("Name");
-                    ui.add(egui::TextEdit::singleline(&mut draft.device_name).desired_width(260.0));
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Receive port");
-                    ui.add(egui::DragValue::new(&mut draft.receive_port).range(1024..=65535));
-                });
-                ui.add_space(4.0);
-                ui.label(
-                    RichText::new("DOWNLOAD FOLDER")
-                        .size(10.0)
-                        .strong()
-                        .color(MUTED),
-                );
-                ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new(draft.download_dir.display().to_string())
-                            .small()
-                            .color(TEXT),
-                    );
-                    if ui.button("Change").clicked() {
-                        change_folder = true;
-                    }
-                });
-                ui.add_space(6.0);
-                ui.label(RichText::new("IDENTITY").size(10.0).strong().color(MUTED));
-                ui.label(
-                    RichText::new(self.identity.fingerprint_hex())
-                        .monospace()
-                        .small()
-                        .color(MUTED),
-                );
-                ui.label(
-                    RichText::new(format!("Data: {}", self.data_dir.display()))
-                        .small()
-                        .color(MUTED),
-                );
-                ui.add_space(6.0);
-                ui.label(
-                    RichText::new("TRUSTED DEVICES")
-                        .size(10.0)
-                        .strong()
-                        .color(MUTED),
-                );
-                let trusted: Vec<TrustedDevice> = self.trust.list().unwrap_or_default();
-                if trusted.is_empty() {
-                    ui.label(RichText::new("No paired devices.").small().color(MUTED));
-                }
-                for device in &trusted {
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(&device.name).small().color(TEXT));
-                        ui.label(
-                            RichText::new(shadow_transfer::util::short_fingerprint(
-                                &device.fingerprint,
-                            ))
-                            .monospace()
-                            .small()
-                            .color(MUTED),
-                        );
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            if ui.small_button("Revoke").clicked() {
-                                if let Ok(bytes) = hex::decode(&device.fingerprint) {
-                                    if let Ok(fingerprint) = bytes.try_into() {
-                                        revoke = Some(fingerprint);
-                                    }
-                                }
-                            }
-                        });
-                    });
-                }
-                ui.add_space(10.0);
-                ui.horizontal(|ui| {
-                    if ui
-                        .add(
-                            egui::Button::new(RichText::new("Save").strong().color(Color32::WHITE))
-                                .fill(ACCENT_DARK),
-                        )
-                        .clicked()
-                    {
-                        save = true;
-                    }
-                    if ui.button("Close").clicked() {
-                        close = true;
-                    }
-                });
-            });
-        if change_folder {
-            if let Some(folder) = rfd::FileDialog::new().pick_folder() {
-                draft.download_dir = folder;
-            }
-        }
-        if let Some(fingerprint) = revoke {
-            match self.trust.revoke(&fingerprint) {
-                Ok(_) => {
-                    self.set_toast("Device trust revoked", false);
-                }
-                Err(err) => self.set_toast(format!("Cannot update trust store: {err}"), true),
-            }
-        }
-        if save {
-            self.settings_draft = Some(draft);
-            self.save_settings();
-        } else if close {
-            self.settings_open = false;
-            self.settings_draft = None;
-        } else {
-            self.settings_draft = Some(draft);
-        }
-    }
-
     fn paint_drop_overlay(&self, ctx: &egui::Context) {
         let hovering = ctx.input(|input| !input.raw.hovered_files.is_empty());
         if !hovering {
@@ -2404,6 +3105,45 @@ impl ShadowApp {
             TEXT,
         );
     }
+}
+
+fn surface_frame() -> egui::Frame {
+    egui::Frame::none()
+        .fill(CARD)
+        .stroke(Stroke::new(1.0_f32, BORDER))
+        .rounding(Rounding::same(16.0))
+        .inner_margin(egui::Margin::same(18.0))
+}
+
+fn section_label(ui: &mut egui::Ui, text: &str) {
+    ui.label(RichText::new(text).size(11.0).strong().color(MUTED));
+}
+
+fn stat_card(ui: &mut egui::Ui, label: &str, value: String, color: Color32) {
+    egui::Frame::none()
+        .fill(CARD)
+        .stroke(Stroke::new(1.0_f32, BORDER))
+        .rounding(Rounding::same(14.0))
+        .inner_margin(egui::Margin::symmetric(14.0, 12.0))
+        .show(ui, |ui| {
+            ui.label(RichText::new(value).size(24.0).strong().color(color));
+            ui.label(RichText::new(label).size(10.0).color(MUTED));
+        });
+}
+
+fn info_row(ui: &mut egui::Ui, label: &str, value: &str) {
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(label).small().color(MUTED));
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            ui.label(RichText::new(value).monospace().small().color(TEXT));
+        });
+    });
+}
+
+fn local_ipv4() -> Option<String> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("192.0.2.1:80").ok()?;
+    socket.local_addr().ok().map(|addr| addr.ip().to_string())
 }
 
 fn peer_is_online(peer: &PeerView) -> bool {
@@ -2439,65 +3179,6 @@ fn phase_label(phase: TransferPhase) -> (&'static str, Color32) {
     }
 }
 
-fn configure_style(ctx: &egui::Context) {
-    let mut style = (*ctx.style()).clone();
-    let mut visuals = egui::Visuals::dark();
-    visuals.panel_fill = BG;
-    visuals.window_fill = CARD;
-    visuals.extreme_bg_color = Color32::from_rgb(6, 7, 9);
-    visuals.faint_bg_color = Color32::from_rgb(22, 24, 30);
-    visuals.selection.bg_fill = ACCENT_DARK;
-    visuals.selection.stroke = Stroke::new(1.0_f32, ACCENT);
-    visuals.widgets.noninteractive.bg_fill = PANEL;
-    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, TEXT);
-    visuals.widgets.inactive.bg_fill = CARD;
-    visuals.widgets.inactive.weak_bg_fill = CARD;
-    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, TEXT);
-    visuals.widgets.hovered.bg_fill = Color32::from_rgb(32, 34, 42);
-    visuals.widgets.hovered.weak_bg_fill = Color32::from_rgb(32, 34, 42);
-    visuals.widgets.hovered.fg_stroke = Stroke::new(1.0_f32, TEXT);
-    visuals.widgets.active.bg_fill = ACCENT_DARK;
-    visuals.widgets.active.weak_bg_fill = ACCENT_DARK;
-    visuals.widgets.active.fg_stroke = Stroke::new(1.0_f32, Color32::WHITE);
-    for widget in [
-        &mut visuals.widgets.inactive,
-        &mut visuals.widgets.hovered,
-        &mut visuals.widgets.active,
-        &mut visuals.widgets.noninteractive,
-    ] {
-        widget.rounding = Rounding::same(7.0);
-    }
-    style.visuals = visuals;
-    style.spacing.item_spacing = Vec2::new(9.0, 8.0);
-    style.spacing.button_padding = Vec2::new(10.0, 6.0);
-    ctx.set_style(style);
-}
-
-fn install_fonts(ctx: &egui::Context) {
-    let mut fonts = egui::FontDefinitions::default();
-    let candidates = [
-        ("msyh", "C:\\Windows\\Fonts\\msyh.ttc"),
-        ("simsun", "C:\\Windows\\Fonts\\simsun.ttc"),
-        ("segoe", "C:\\Windows\\Fonts\\segoeui.ttf"),
-    ];
-    for (name, path) in candidates {
-        let Ok(bytes) = std::fs::read(path) else {
-            continue;
-        };
-        fonts
-            .font_data
-            .insert(name.to_string(), egui::FontData::from_owned(bytes));
-        for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
-            fonts
-                .families
-                .entry(family)
-                .or_default()
-                .push(name.to_string());
-        }
-    }
-    ctx.set_fonts(fonts);
-}
-
 impl eframe::App for ShadowApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         while let Ok(event) = self.events_rx.try_recv() {
@@ -2529,12 +3210,11 @@ impl eframe::App for ShadowApp {
                 }
             }
         }
-        self.header(ctx);
-        self.side_panel(ctx);
-        self.central_panel(ctx);
+        self.nav_panel(ctx);
+        self.top_bar(ctx);
+        self.screen_content(ctx);
         self.approval_window(ctx);
         self.send_window(ctx);
-        self.settings_window(ctx);
         self.paint_drop_overlay(ctx);
         if self.ongoing() {
             ctx.request_repaint_after(Duration::from_millis(100));
@@ -2557,8 +3237,8 @@ pub struct FatalApp {
 
 impl RootApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        configure_style(&cc.egui_ctx);
-        install_fonts(&cc.egui_ctx);
+        crate::theme::configure(&cc.egui_ctx);
+        crate::theme::install_fonts(&cc.egui_ctx);
         match ShadowApp::try_new(cc) {
             Ok(app) => Self::Ready(Box::new(app)),
             Err(message) => Self::Fatal(FatalApp { message }),

@@ -38,6 +38,7 @@ The same Rust protocol, crypto, streaming and resume engine runs on both platfor
 | Real-device transfer | Windows → SM-T505: 449 MB and 1.845 GB files completed and BLAKE3-verified |
 | Real Wi-Fi throughput | ~15 MB/s on the test 5 GHz link (link-bound; latency spikes observed) |
 | Latest speed-tuning build | Built; awaits a repeat transfer on the tablet |
+| v0.2 M2 premium UI | Implemented on `redesign/v0.2`: design tokens, Windows navigation shell, Android bottom navigation |
 | Automated Android device tests | Not yet |
 
 > **Honest note:** this is an early `0.1.0` release. The core flows are real and tested, but there is no Play Store signing setup, the binaries are unsigned, and Android identity keys are not yet Keystore-wrapped. See [Known limitations](#known-limitations).
@@ -53,15 +54,15 @@ The same Rust protocol, crypto, streaming and resume engine runs on both platfor
 - **Files and folders** — nested paths, Unicode names, collision-safe naming, never silent overwrite.
 - **Cancellation** — from either sender or receiver.
 - **LAN discovery** — short UDP broadcast windows while receiving, plus manual IP; no cloud relay, no port forwarding.
-- **Windows UI** — auto/manual connection cards, dedicated pairing action, drag-and-drop, queue, live speed/ETA, history, settings, receive mode.
+- **Windows UI** — premium navigation shell (Home, Send, Receive, Activity, Trusted devices, Settings, Advanced), auto/manual connection cards, drag-and-drop, queue, live speed/ETA, history.
 - **Android UI** — Compose, AMOLED dark theme, SAF destination import, foreground data-sync service, pairing countdown, approvals, discovery/manual sending.
 - **Transfer tuning** — 8 MiB TCP buffers, incremental verification for fresh files, transfer-only Android Wi-Fi performance lock.
 
 ## Screenshots
 
-| Connect and pair | Receive and verify | Approval |
-|---|---|---|
-| ![Windows connect](docs/images/windows-connect.png) | ![Windows receive](docs/images/windows-receive.png) | ![Pairing approval](docs/images/windows-approval.png) |
+The v0.2 redesign is in progress on `redesign/v0.2`: deep navy/charcoal surfaces, blue-to-cyan accents, rounded cards, a Windows navigation shell and Android bottom navigation.
+
+![Shadow Transfer Windows Home](docs/images/windows-m2-home.png)
 
 ## How it works
 

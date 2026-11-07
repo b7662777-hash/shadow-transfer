@@ -28,7 +28,7 @@ getrandom = "0.2"
 hex = "0.4"
 if-addrs = "0.12"
 jni = "0.21"
-rfd = "0.14"
+rfd = "0.17"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging"] }
 rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
 serde = "1"

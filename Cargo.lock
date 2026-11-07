@@ -3294,7 +3294,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tokio-rustls",
  "tracing",
 ]
@@ -3308,7 +3308,7 @@ dependencies = [
  "serde_json",
  "shadow-protocol",
  "socket2 0.5.10",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tokio",
  "tokio-util",
  "tracing",
@@ -3335,7 +3335,7 @@ dependencies = [
  "bytes",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tokio",
 ]
 
@@ -3355,7 +3355,7 @@ dependencies = [
  "shadow-protocol",
  "socket2 0.5.10",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tokio",
  "tokio-rustls",
  "tokio-util",

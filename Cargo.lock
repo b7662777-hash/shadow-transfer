@@ -3286,7 +3286,7 @@ name = "shadow-crypto"
 version = "0.1.0"
 dependencies = [
  "blake3",
- "getrandom 0.2.17",
+ "getrandom 0.4.3",
  "hex",
  "rcgen",
  "rustls",
@@ -3346,7 +3346,7 @@ dependencies = [
  "blake3",
  "bytes",
  "criterion",
- "getrandom 0.2.17",
+ "getrandom 0.4.3",
  "hex",
  "rustls",
  "serde",

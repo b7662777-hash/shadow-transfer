@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/b7662777-hash/shadow-transfer/security/advisories/new
+    about: Report security issues privately. Do not open a public issue.
+  - name: Documentation
+    url: https://github.com/b7662777-hash/shadow-transfer/tree/main/docs
+    about: Architecture, protocol, security, build, testing and troubleshooting.

@@ -1,0 +1,16 @@
+Shadow Transfer loopback benchmark (includes BLAKE3 verification)
+chunk sweep, 100 MiB file
+chunk 256 KiB                  100.0 MiB     332.8 ms     300.5 MiB/s
+chunk 512 KiB                  100.0 MiB     298.4 ms     335.1 MiB/s
+chunk 1024 KiB                 100.0 MiB     339.2 ms     294.8 MiB/s
+chunk 2048 KiB                 100.0 MiB     265.8 ms     376.2 MiB/s
+chunk 4096 KiB                 100.0 MiB     356.2 ms     280.7 MiB/s
+chunk adaptive                 100.0 MiB     273.2 ms     366.0 MiB/s
+
+file-size sweep, 1024 KiB chunks
+100 MiB                        100.0 MiB     319.0 ms     313.5 MiB/s
+
+aggregate: 100.0 MiB in 0.32 s = 313.2 MiB/s
+
+raw TCP loopback            1024.0 MiB     791.4 ms    1294.0 MiB/s
+note: loopback only; Wi-Fi/Android results require the physical tablet

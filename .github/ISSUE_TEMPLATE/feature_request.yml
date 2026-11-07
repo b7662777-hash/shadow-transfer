@@ -1,0 +1,59 @@
+name: Feature request
+description: Propose a focused improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Large protocol or security changes need design discussion first. Please describe
+        the problem and constraints before the solution.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Windows UI
+        - Android UI
+        - Transfer engine
+        - Protocol
+        - Security / pairing
+        - Discovery / networking
+        - Build / packaging / CI
+        - Documentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or engineering problem does this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and trade-offs
+      description: Include security, integrity, battery and compatibility implications.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: This does not require weakening TLS, pinning, hashing or path validation.
+          required: true
+        - label: I searched existing issues and documentation.
+          required: true

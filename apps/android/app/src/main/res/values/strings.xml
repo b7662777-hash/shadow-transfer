@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Shadow Transfer</string>
+    <string name="notification_channel_name">File transfers</string>
+    <string name="notification_channel_description">Local file transfer status</string>
+    <string name="notification_title">Shadow Transfer</string>
+    <string name="notification_receiving">Receive mode is active</string>
+    <string name="notification_transferring">Transfer in progress</string>
+</resources>

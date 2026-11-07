@@ -1,0 +1,29 @@
+# Rust
+/target/
+**/target/
+**/*.rs.bk
+
+# Generated release artifacts (published as GitHub Release assets)
+/dist/
+
+# Android / Gradle
+/apps/android/.gradle/
+/apps/android/local.properties
+/apps/android/app/build/
+/apps/android/app/src/main/jniLibs/
+**/*.apk
+**/*.aab
+**/*.keystore
+**/*.jks
+/apps/android/keystore.properties
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs and local env
+*.log
+.env
+.env.*

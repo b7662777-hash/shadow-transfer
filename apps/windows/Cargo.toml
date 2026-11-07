@@ -1,0 +1,30 @@
+[package]
+name = "shadow-windows"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "ShadowTransfer"
+path = "src/main.rs"
+
+[dependencies]
+dirs.workspace = true
+eframe = { workspace = true, features = ["default_fonts", "glow"] }
+hex.workspace = true
+image = { version = "0.25", default-features = false, features = ["png"] }
+rfd.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+shadow-crypto = { path = "../../crates/shadow-crypto" }
+shadow-discovery = { path = "../../crates/shadow-discovery" }
+shadow-transfer = { path = "../../crates/shadow-transfer" }
+tokio = { workspace = true, features = ["rt-multi-thread", "net", "fs", "sync", "time", "macros"] }
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-appender = "0.2"
+tracing-subscriber.workspace = true
+
+[build-dependencies]
+winresource = "0.1"

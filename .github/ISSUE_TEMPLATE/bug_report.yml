@@ -1,0 +1,75 @@
+name: Bug report
+description: Report a reproducible problem in Shadow Transfer
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Do not include pairing codes, private keys, file contents, or personal IP addresses.**
+        Redact logs before attaching them.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows
+        - Android
+        - Both
+        - Build / CI
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Shadow Transfer version, Windows version, Android version/device model
+      placeholder: "v0.1.0; Windows 11 26200; Galaxy Tab A7 SM-T505, Android 12"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Enable Receive on the tablet
+        2. Scan and select the device
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: |
+        Windows log: %LOCALAPPDATA%\ShadowTransfer\shadow.log.YYYY-MM-DD.
+        Remove pairing codes, IP addresses and fingerprints before pasting.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I redacted pairing codes, keys, personal IP addresses and file contents.
+          required: true
+        - label: I searched existing issues and documentation.
+          required: true

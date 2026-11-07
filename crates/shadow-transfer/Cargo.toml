@@ -1,0 +1,32 @@
+[package]
+name = "shadow-transfer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+blake3.workspace = true
+bytes.workspace = true
+getrandom.workspace = true
+hex.workspace = true
+rustls.workspace = true
+socket2.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+shadow-crypto = { path = "../shadow-crypto" }
+shadow-protocol = { path = "../shadow-protocol" }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt", "net", "fs", "io-util", "sync", "time", "macros"] }
+tokio-rustls.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[[bench]]
+name = "core"
+harness = false

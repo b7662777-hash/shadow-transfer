@@ -1,0 +1,17 @@
+[package]
+name = "shadow-e2e"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+blake3.workspace = true
+shadow-crypto = { path = "../../crates/shadow-crypto" }
+shadow-protocol = { path = "../../crates/shadow-protocol" }
+shadow-transfer = { path = "../../crates/shadow-transfer" }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "net", "io-util", "fs"] }
+tokio-rustls.workspace = true
+tokio-util.workspace = true

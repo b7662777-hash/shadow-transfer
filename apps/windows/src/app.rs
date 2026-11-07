@@ -2503,7 +2503,8 @@ impl eframe::App for ShadowApp {
         while let Ok(event) = self.events_rx.try_recv() {
             self.handle_app_event(ctx, event);
         }
-        if !self.discovery_running && Instant::now() >= self.next_discovery_at {
+        let transfer_active = self.cards.iter().any(TransferCard::is_active);
+        if !self.discovery_running && !transfer_active && Instant::now() >= self.next_discovery_at {
             let focused = ctx.input(|input| input.viewport().focused.unwrap_or(true));
             let minimized = ctx.input(|input| input.viewport().minimized.unwrap_or(false));
             if focused && !minimized {

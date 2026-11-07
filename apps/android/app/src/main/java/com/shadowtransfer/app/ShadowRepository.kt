@@ -415,7 +415,8 @@ class ShadowRepository(private val context: Context) {
         if (autoDiscoveryJob?.isActive == true) return
         autoDiscoveryJob = scope.launch {
             while (isActive && foreground) {
-                if (!_state.value.scanning) {
+                val transferActive = _state.value.transfers.any { it.active }
+                if (!transferActive && !_state.value.scanning) {
                     runDiscoveryPass()
                 }
                 delay(10_000)
